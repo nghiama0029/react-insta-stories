@@ -38,10 +38,15 @@ export default function () {
 
   usePreLoader(stories, currentId, preloadCount);
 
+  const hasEndedRef = useRef(false);
+
   useEffect(() => {
     if (typeof currentIndex === "number") {
       if (currentIndex >= 0 && currentIndex < stories.length) {
-        setCurrentIdWrapper(() => currentIndex);
+        setCurrentId(currentIndex);
+        setPause(false);
+        setBufferAction(false);
+        console.log("from lib", currentIndex);
       } else {
         console.error(
           "Index out of bounds. Current index was set to value more than the length of stories array.",
@@ -50,7 +55,6 @@ export default function () {
       }
     }
   }, [currentIndex]);
-
 
   useEffect(() => {
     if (typeof isPaused === "boolean") {
@@ -91,10 +95,11 @@ export default function () {
   };
 
   const previous = () => {
-    if (onPrevious != undefined) {
-      onPrevious();
-    }
-    setCurrentIdWrapper((prev) => (prev > 0 ? prev - 1 : prev));
+    hasEndedRef.current = false;
+    setPause(false);
+    setBufferAction(false);
+
+    setCurrentId((prev) => (prev > 0 ? prev - 1 : prev));
   };
 
   const next = (options?: { isSkippedByUser?: boolean }) => {
@@ -121,9 +126,17 @@ export default function () {
   };
 
   const updateNextStoryId = () => {
-    setCurrentIdWrapper((prev) => {
-      if (prev < stories.length - 1) return prev + 1;
-      onAllStoriesEnd && onAllStoriesEnd(currentId, stories);
+    setCurrentId((prev) => {
+      if (prev < stories.length - 1) {
+        hasEndedRef.current = false;
+        return prev + 1;
+      }
+
+      if (!hasEndedRef.current) {
+        hasEndedRef.current = true;
+        onAllStoriesEnd && onAllStoriesEnd(prev, stories);
+      }
+
       return prev;
     });
   };
@@ -135,16 +148,21 @@ export default function () {
     }, 200);
   };
 
-  const mouseUp =
-    (type: string) => (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      mousedownId.current && clearTimeout(mousedownId.current);
-      if (pause) {
-        toggleState("play");
-      } else {
-        type === "next" ? next({ isSkippedByUser: true }) : previous();
-      }
-    };
+  const mouseUp = (type: string) => (e) => {
+    e.preventDefault();
+    mousedownId.current && clearTimeout(mousedownId.current);
+
+    if (type === "previous") {
+      previous(); // 🔥 luôn cho phép
+      return;
+    }
+
+    if (pause) {
+      toggleState("play");
+    } else {
+      next();
+    }
+  };
 
   const getVideoDuration = (duration: number) => {
     setVideoDuration(duration * 1000);
@@ -204,7 +222,7 @@ const styles = {
     flexDirection: "column" as const,
     background: "#111",
     position: "relative" as const,
-    WebkitUserSelect: 'none' as const,
+    WebkitUserSelect: "none" as const,
   },
   overlay: {
     position: "absolute" as const,
